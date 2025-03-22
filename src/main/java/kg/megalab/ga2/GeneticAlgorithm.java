@@ -1,5 +1,3 @@
-package kg.megalab.ga2;
-
 import java.util.*;
 
 public class GeneticAlgorithm {
@@ -20,13 +18,30 @@ public class GeneticAlgorithm {
         // Эволюция популяции в течение MAX_GENERATIONS поколений
         for (int generation = 0; generation < MAX_GENERATIONS; generation++) {
             population = evolvePopulation(population);
+
+            // Нахождение лучшей хромосомы в текущем поколении
+            String bestChromosome = findBest(population);
+            double bestX = decodeGrayToDecimal(bestChromosome);
+            double bestY = objectiveFunction(bestX);
+
+            // Вывод информации о текущем поколении
+            System.out.println("Поколение " + (generation + 1) + ":");
+            System.out.println("  Лучшая хромосома: " + bestChromosome);
+            System.out.println("  Лучшее x: " + bestX);
+            System.out.println("  Лучшее y: " + bestY);
+
+            // Дополнительно: средняя приспособленность
+            double averageFitness = population.stream()
+                    .mapToDouble(c -> objectiveFunction(decodeGrayToDecimal(c)))
+                    .average()
+                    .orElse(0);
+            System.out.println("  Средняя приспособленность: " + averageFitness);
+            System.out.println("----------------------------------------");
         }
 
-        // Нахождение лучшей хромосомы в популяции
+        // Нахождение лучшей хромосомы в финальной популяции
         String bestChromosome = findBest(population);
-        // Декодирование лучшей хромосомы в десятичное число
         double bestX = decodeGrayToDecimal(bestChromosome);
-        // Вычисление значения целевой функции для лучшего x
         double bestY = objectiveFunction(bestX);
         System.out.println("Лучшее решение: x = " + bestX + ", y = " + bestY);
 
@@ -51,12 +66,14 @@ public class GeneticAlgorithm {
     // Эволюция популяции: отбор, кроссовер и мутация
     private static List<String> evolvePopulation(List<String> population) {
         List<String> newPopulation = new ArrayList<>();
-        // Сортировка популяции по значению целевой функции (лучшие особи в начале списка)
-        population.sort(Comparator.comparingDouble(c -> objectiveFunction(decodeGrayToDecimal(c))));
 
-        for (int i = 0; i < POPULATION_SIZE / 2; i++) {
-            String parent1 = population.get(i);
-            String parent2 = population.get(i + 1);
+        // Селекция через рулетку
+        List<String> selectedPopulation = rouletteWheelSelection(population);
+
+        // Кроссовер и мутация
+        for (int i = 0; i < selectedPopulation.size() / 2; i++) {
+            String parent1 = selectedPopulation.get(i);
+            String parent2 = selectedPopulation.get(i + 1);
             if (Math.random() < CROSSOVER_RATE) {
                 // Кроссовер между двумя родителями
                 String[] offspring = crossover(parent1, parent2);
@@ -69,7 +86,35 @@ public class GeneticAlgorithm {
                 newPopulation.add(parent2);
             }
         }
+
+        // Редукция популяции до исходного размера
+        if (newPopulation.size() > POPULATION_SIZE) {
+            newPopulation = newPopulation.subList(0, POPULATION_SIZE);
+        }
+
         return newPopulation;
+    }
+
+    // Селекция через рулетку
+    private static List<String> rouletteWheelSelection(List<String> population) {
+        List<String> selectedPopulation = new ArrayList<>();
+        double totalFitness = population.stream()
+                .mapToDouble(c -> 1 / (1 + objectiveFunction(decodeGrayToDecimal(c)))) // Инвертируем приспособленность для минимизации
+                .sum();
+
+        Random random = new Random();
+        for (int i = 0; i < population.size(); i++) {
+            double randomValue = random.nextDouble() * totalFitness;
+            double cumulativeFitness = 0.0;
+            for (String chromosome : population) {
+                cumulativeFitness += 1 / (1 + objectiveFunction(decodeGrayToDecimal(chromosome)));
+                if (cumulativeFitness >= randomValue) {
+                    selectedPopulation.add(chromosome);
+                    break;
+                }
+            }
+        }
+        return selectedPopulation;
     }
 
     // Кроссовер: создание двух потомков из двух родителей
@@ -136,9 +181,34 @@ public class GeneticAlgorithm {
 
         // Эволюция популяции в течение MAX_GENERATIONS поколений
         for (int generation = 0; generation < MAX_GENERATIONS; generation++) {
-            population.sort(Comparator.comparingInt(GeneticAlgorithm::autocorrelation)); // Сортировка по автокорреляции
-            List<String> newPopulation = new ArrayList<>();
+            // Сортировка популяции по значению PSL (лучшие особи в начале списка)
+            population.sort(Comparator.comparingInt(GeneticAlgorithm::autocorrelation));
 
+            // Лучшая последовательность в текущем поколении
+            String bestSequence = population.get(0);
+            int bestPSL = autocorrelation(bestSequence);
+
+            // Вывод информации о текущем поколении
+            System.out.println("Поколение " + (generation + 1) + ":");
+            System.out.println("  Лучшая последовательность: " + bestSequence);
+            System.out.println("  Лучший PSL: " + bestPSL);
+
+            // Среднее значение PSL в популяции (опционально)
+            double averagePSL = population.stream()
+                    .mapToInt(GeneticAlgorithm::autocorrelation)
+                    .average()
+                    .orElse(0);
+            System.out.println("  Средний PSL: " + averagePSL);
+
+            // Худшая последовательность в популяции (опционально)
+            String worstSequence = population.get(population.size() - 1);
+            int worstPSL = autocorrelation(worstSequence);
+            System.out.println("  Худшая последовательность: " + worstSequence);
+            System.out.println("  Худший PSL: " + worstPSL);
+            System.out.println("----------------------------------------");
+
+            // Создание новой популяции
+            List<String> newPopulation = new ArrayList<>();
             for (int i = 0; i < P / 2; i++) {
                 String parent1 = population.get(i);
                 String parent2 = population.get(i + 1);
@@ -159,9 +229,11 @@ public class GeneticAlgorithm {
         System.out.println("_______________________________________________________");
         System.out.println("\nНахождение двоичных последовательностей с заданным PSL");
 
-        // Вывод K лучших последовательностей
+// Вывод K лучших последовательностей и их PSL
         for (int i = 0; i < K; i++) {
-            System.out.println("Лучшее решение " + (i + 1) + ": " + population.get(i));
+            String bestSequence = population.get(i);
+            int bestPSL = autocorrelation(bestSequence); // Вычисление PSL для последовательности
+            System.out.println("Лучшее решение " + (i + 1) + ": " + bestSequence + " (PSL: " + bestPSL + ")");
         }
     }
 
